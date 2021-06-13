@@ -66,6 +66,7 @@ class FieldItem(QPushButton):
         self.visible = False
         self.neighbours = None
         self.blocked = False
+        self.was_fatal_item = False
 
         self.current_image = self.parent().images.empty
 
@@ -137,6 +138,8 @@ class FieldItem(QPushButton):
         neighbour_mines_count = sum(n.has_mine for n in self.neighbours)
         if neighbour_mines_count > 0 and not self.has_mine:
             self.current_image = parent.images.numbers[neighbour_mines_count]
+        elif self.has_mine and self.was_fatal_item:
+            self.current_image = parent.images.explosion
         elif self.has_mine:
             self.current_image = parent.images.mine
         else:
@@ -175,6 +178,7 @@ class FieldItem(QPushButton):
         self.visible = False
         self.status = FieldState.EMPTY
         self.current_image = self.parent().images.empty
+        self.was_fatal_item = False
         self.update()
 
     def mousePressEvent(self, e: QMouseEvent):
@@ -257,11 +261,15 @@ class GameField(QWidget):
                     current_item = choice(self.fieldItems)
                     if not current_item.has_mine:
                         print(f"Ok, that mine was moved to {current_item}")
+                        index = self.items_with_mines.index(item)
+                        self.items_with_mines[index] = current_item
                         current_item.has_mine = True
                         found_new_mine_spot = True
                 item.calculate()
 
             elif item.has_mine:
+                item.was_fatal_item = True
+                item.update()
                 self.loose()
             else:
                 item.calculate()
@@ -271,14 +279,16 @@ class GameField(QWidget):
 
             self.first_turn = False
 
-        else:
-            self.start_game()
-            self.item_clicked(item)
+        elif self.game_status == GameStatus.RUNNING:
+                self.first_turn = False
+                self.start_game()
+                self.item_clicked(item)
 
     def win(self):
         self.game_status = GameStatus.WON
         print("You have won!")
         self.stop_game()
+        self.game_ended.emit()
         self.game_status_changed.emit(self.game_status)
 
     def loose(self):
@@ -299,10 +309,14 @@ class GameField(QWidget):
     def stop_game(self):
         self.game_run = False
         list(map(FieldItem.show_any_state, self.fieldItems))
-        timer = QTimer(self)
-        timer.singleShot(3000, self.reset_game)
+        self.timer = QTimer(self)
+        self.timer.singleShot(3000, self.reset_game)
 
     def reset_game(self):
+        try:
+            del self.timer
+        except Exception:
+            pass
         list(map(FieldItem.reset, self.fieldItems))
         self.mines_found = 0
         self.game_run = False
@@ -318,6 +332,10 @@ class StatusBar(QWidget):
         super(StatusBar, self).__init__(*args, **kwargs)
         layout = QHBoxLayout()
         self.setLayout(layout)
+
+        # layout.addWidget(QSpacerItem(self))
+        # layout.insertStretch(0)
+        layout.insertStretch(-1, 0)
 
         self.mine_img = QLabel(self)
         pixmap = QPixmap().fromImage(self.parent().images.mine, Qt.AutoColor)
@@ -407,6 +425,7 @@ class MainWindow(QMainWindow):
         self.game_field.mines_count_changed.connect(self.status_bar.mines_counter.display)
         self.game_field.game_started.connect(self.status_bar.start_timer)
         self.game_field.game_ended.connect(self.status_bar.end_timer)
+        # self.game_field.game_w.connect(self.status_bar.end_timer)
         self.game_field.game_reset.connect(self.status_bar.reset)
         self.game_field.game_status_changed.connect(self.status_bar.set_smile)
 
