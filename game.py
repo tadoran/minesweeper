@@ -20,6 +20,7 @@ class Images(QObject):
         self.mine = QImage("img//mine.png")
         self.question = QImage("img//question.png")
         self.smile = QImage("img//smile.png")
+        self.win_smile = QImage("img//win_smile.png")
         self.numbers = [
             QImage(),
             QImage("img//1.png"),
@@ -40,9 +41,15 @@ class FieldState(Enum):
     QUESTIONABLE = 2
 
 
-class FieldItemVisibility:
+class FieldItemVisibility(Enum):
     hidden = 0
     visible = 1
+
+
+class GameStatus(Enum):
+    RUNNING = 0
+    LOST = 1
+    WON = 2
 
 
 class FieldItem(QPushButton):
@@ -136,7 +143,6 @@ class FieldItem(QPushButton):
             self.current_image = parent.images.checked
         self.update()
 
-
     def calculate(self):
         if self.blocked:  # or self.visible:
             return
@@ -184,6 +190,7 @@ class FieldItem(QPushButton):
 
 class GameField(QWidget):
     mines_count_changed = pyqtSignal(int)
+    game_status_changed = pyqtSignal(GameStatus)
     game_started = pyqtSignal()
     game_ended = pyqtSignal()
     game_reset = pyqtSignal()
@@ -200,6 +207,7 @@ class GameField(QWidget):
         self.game_run = False
         self.first_turn = True
         self.items_with_mines = []
+        self.game_status = GameStatus.RUNNING
 
         self.fieldItems2D = []
         layout = QGridLayout(self)
@@ -219,12 +227,10 @@ class GameField(QWidget):
         self.mines_found += change
         self.mines_count_changed.emit(self.mines_found)
         if self.mines_found == self.mines_count:
-            mines_FieldItems_status =[i.status for i in self.items_with_mines]
-            win_condition = set(mines_FieldItems_status) == set([FieldState.MINE])
-            print(win_condition)
+            mines_FieldItems_status = [i.status for i in self.items_with_mines]
+            win_condition = set(mines_FieldItems_status) == {FieldState.MINE}
             if win_condition:
-                print("You have won!")
-                self.stop_game()
+                self.win()
 
     def place_mines(self):
         mines_positions = set()
@@ -256,10 +262,7 @@ class GameField(QWidget):
                 item.calculate()
 
             elif item.has_mine:
-                print("You loose!")
-                item.current_image = self.images.mine
-                self.game_run = False
-                self.game_ended.emit()
+                self.loose()
             else:
                 item.calculate()
 
@@ -272,8 +275,23 @@ class GameField(QWidget):
             self.start_game()
             self.item_clicked(item)
 
+    def win(self):
+        self.game_status = GameStatus.WON
+        print("You have won!")
+        self.stop_game()
+        self.game_status_changed.emit(self.game_status)
+
+    def loose(self):
+        self.game_status = GameStatus.LOST
+        print("You loose!")
+        # item.current_image = self.images.mine
+        self.game_run = False
+        self.game_ended.emit()
+        self.game_status_changed.emit(self.game_status)
+
     def start_game(self):
         self.game_reset.emit()
+        self.game_status = GameStatus.RUNNING
         self.game_run = True
         self.first_turn = True
         self.game_started.emit()
@@ -288,6 +306,8 @@ class GameField(QWidget):
         list(map(FieldItem.reset, self.fieldItems))
         self.mines_found = 0
         self.game_run = False
+        self.game_status = GameStatus.RUNNING
+        self.game_status_changed.emit(self.game_status)
         list(map(FieldItem.reset, self.fieldItems))
         self.place_mines()
         self.game_reset.emit()
@@ -309,9 +329,12 @@ class StatusBar(QWidget):
         layout.addWidget(self.mines_counter)
 
         self.img = QLabel(self)
-        pixmap = QPixmap().fromImage(self.parent().images.smile, Qt.AutoColor)
-        # pixmap = QPixmap().fromImage(self.parent().images.dead, Qt.AutoColor)
-        self.img.setPixmap(pixmap)
+        self.pixmaps = {}
+        self.pixmaps["smile"] = QPixmap().fromImage(self.parent().images.smile, Qt.AutoColor)
+        self.pixmaps["dead"] = QPixmap().fromImage(self.parent().images.dead, Qt.AutoColor)
+        self.pixmaps["won"] = QPixmap().fromImage(self.parent().images.win_smile, Qt.AutoColor)
+        self.set_smile(GameStatus.RUNNING)
+
         # self.img.setFixedSize(pixmap.size())
         self.img.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.img)
@@ -321,13 +344,18 @@ class StatusBar(QWidget):
         layout.addWidget(self.timer_counter)
         self.timer = QTimer(self)
 
+    def set_smile(self, game_status: GameStatus):
+        # self.img.setPixmap(pixmap)
+        if game_status == GameStatus.RUNNING:
+            self.img.setPixmap(self.pixmaps["smile"])
+        elif game_status == GameStatus.WON:
+            self.img.setPixmap(self.pixmaps["won"])
+        elif game_status == GameStatus.LOST:
+            self.img.setPixmap(self.pixmaps["dead"])
+        self.img.update()
+
     def start_timer(self):
-        try:
-            self.timer.stop()
-            self.timer.disconnect()
-            del self.timer
-        except Exception:
-            pass
+        self.end_timer()
         self.timer = QTimer(self)
         self.timer_counter.display(0)
         self.timer.setInterval(1000)
@@ -335,9 +363,12 @@ class StatusBar(QWidget):
         self.timer.start()
 
     def end_timer(self):
-        self.timer.stop()
-        self.timer.disconnect()
-        del self.timer
+        try:
+            self.timer.stop()
+            self.timer.disconnect()
+            del self.timer
+        except Exception:
+            pass
 
     def update_counter(self, value):
         self.mines_counter.display(value)
@@ -348,6 +379,12 @@ class StatusBar(QWidget):
 
     def sizeHint(self):
         return QSize(40, 60)
+
+
+class GameDifficulty(Enum):
+    EASY = (10, 10, 10)
+    MEDIUM = (20, 20, 20)
+    HARD = (20, 20, 30)
 
 
 class MainWindow(QMainWindow):
@@ -363,14 +400,15 @@ class MainWindow(QMainWindow):
         self.status_bar = StatusBar(self)
         layout.addWidget(self.status_bar)
 
-        self.game_field = GameField(height=10, width=10, mines_count=10, parent=self)
+        height, width, mines_count = GameDifficulty.EASY.value
+        self.game_field = GameField(height=height, width=width, mines_count=mines_count, parent=self)
         layout.addWidget(self.game_field)
 
         self.game_field.mines_count_changed.connect(self.status_bar.mines_counter.display)
         self.game_field.game_started.connect(self.status_bar.start_timer)
         self.game_field.game_ended.connect(self.status_bar.end_timer)
         self.game_field.game_reset.connect(self.status_bar.reset)
-
+        self.game_field.game_status_changed.connect(self.status_bar.set_smile)
 
         self.setCentralWidget(self.mainWidget)
         self.show()
