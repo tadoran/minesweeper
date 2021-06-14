@@ -56,6 +56,12 @@ class GameStatus(Enum):
     WON = 2
 
 
+class GameDifficulty(Enum):
+    EASY = (10, 10, 10)
+    MEDIUM = (12, 12, 20)
+    HARD = (15, 15, 30)
+
+
 class FieldItem(QPushButton):
     changed = pyqtSignal(QObject)
     rightButtonPressed = pyqtSignal()
@@ -74,11 +80,6 @@ class FieldItem(QPushButton):
 
         self.current_image = self.parent().images.empty
 
-        # sizePolicy = QSizePolicy.Expanding
-        # GrowFlag | ShrinkFlag | ExpandFlag
-        # sizePolicy.setHeightForWidth(True)
-        #
-        # self.setSizePolicy(sizePolicy, sizePolicy)
         sizePolicy = QSizePolicy.Expanding
         policy = QSizePolicy()
         policy.setHorizontalPolicy(sizePolicy)
@@ -90,8 +91,8 @@ class FieldItem(QPushButton):
         self.rightButtonPressed.connect(self.toggle_status)
         self.parent().items_block_released.connect(self.release_block)
 
-    def paintEvent(self, QPaintEvent):
-        super().paintEvent(QPaintEvent)
+    def paintEvent(self, e: QPaintEvent):
+        super().paintEvent(e)
         painter = QPainter(self)
 
         painter.drawImage(
@@ -102,6 +103,9 @@ class FieldItem(QPushButton):
 
     def sizeHint(self):
         return QSize(45, 45)
+
+    def minimumSizeHint(self):
+        return QSize(self.sizeHint().width() // 2, self.sizeHint().height() // 2)
 
     def find_neighbours(self):
         if self.neighbours is None:
@@ -132,6 +136,10 @@ class FieldItem(QPushButton):
     def toggle_status(self):
         if not self.parent().game_run:
             return
+
+        if self.status == FieldState.EMPTY and self.current_image != self.parent().images.empty:
+            return
+
         # EMPTY -> MINE -> QUESTIONABLE -> EMPTY ... etc.
         self.status = list(dropwhile(lambda x, c=self.status: x != c, chain.from_iterable(repeat(FieldState, 2))))[1]
 
@@ -143,6 +151,9 @@ class FieldItem(QPushButton):
             self.parent().mines_found_count(-1)
         else:
             self.current_image = self.parent().images.empty
+            self.blocked = False
+            self.visible = False
+
         self.update()
 
     def show_any_state(self):
@@ -201,9 +212,7 @@ class FieldItem(QPushButton):
         elif e.button() == Qt.RightButton:
             self.rightButtonPressed.emit()
         else:
-            print("Other button clicked")
-
-    # TODO: FieldItem must stay squared!
+            pass
 
 
 class GameField(QWidget):
@@ -274,8 +283,9 @@ class GameField(QWidget):
             self.fieldItems2D[y][x].update()
 
     def item_clicked(self, item: FieldItem):
-        # print(f"{item} clicked")
         if self.game_run:
+            if item.status != FieldState.EMPTY:
+                return
             if item.has_mine and self.first_turn:
                 print("Ha-ha, found mine on first turn!")
                 item.has_mine = False
@@ -358,18 +368,9 @@ class StatusBar(QWidget):
         layout = QHBoxLayout()
         self.setLayout(layout)
 
-        # layout.addWidget(QSpacerItem(self))
-        # layout.insertStretch(0)
-        layout.insertStretch(-1, 0)
-
-        self.mine_img = QLabel(self)
-        pixmap = QPixmap().fromImage(self.parent().images.mine, Qt.AutoColor)
-        self.mine_img.setPixmap(pixmap)
-        layout.addWidget(self.mine_img)
-
         self.mines_counter = QLCDNumber(self)
         self.mines_counter.setFrameShape(QFrame.NoFrame)
-        layout.addWidget(self.mines_counter)
+        layout.addWidget(self.mines_counter, alignment=Qt.AlignLeft)
 
         self.img = QLabel(self)
         self.pixmaps = {}
@@ -378,13 +379,12 @@ class StatusBar(QWidget):
         self.pixmaps["won"] = QPixmap().fromImage(self.parent().images.win_smile, Qt.AutoColor)
         self.set_smile(GameStatus.RUNNING)
 
-        # self.img.setFixedSize(pixmap.size())
         self.img.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.img)
 
         self.timer_counter = QLCDNumber(self)
         self.timer_counter.setFrameShape(QFrame.NoFrame)
-        layout.addWidget(self.timer_counter)
+        layout.addWidget(self.timer_counter, alignment=Qt.AlignRight)
         self.timer = QTimer(self)
 
     def set_smile(self, game_status: GameStatus):
@@ -421,12 +421,6 @@ class StatusBar(QWidget):
 
     def sizeHint(self):
         return QSize(40, 60)
-
-
-class GameDifficulty(Enum):
-    EASY = (10, 10, 10)
-    MEDIUM = (12, 12, 20)
-    HARD = (15, 15, 30)
 
 
 class GameActions(QObject):
@@ -485,19 +479,20 @@ class MainWindow(QMainWindow):
         self.images = Images()
         self.game_actions = GameActions(self)
         self.menu = GameMenu(self)
+        self.difficulty = GameDifficulty.EASY
 
+        self.initialize()
+
+    def initialize(self):
         self.mainWidget = QWidget(self)
+
+        height, width, mines_count = self.difficulty.value
+        self.game_field = GameField(height=height, width=width, mines_count=mines_count, parent=self)
 
         layout = QVBoxLayout(self)
         self.mainWidget.setLayout(layout)
-
         self.status_bar = StatusBar(self)
         layout.addWidget(self.status_bar)
-
-        # height, width, mines_count = GameDifficulty.EASY.value
-        # self.game_field = GameField(height=height, width=width, mines_count=mines_count, parent=self)
-        self.game_field = QWidget()
-        self.set_difficulty()
 
         self.game_actions.bind()
 
@@ -515,11 +510,10 @@ class MainWindow(QMainWindow):
         self.show()
 
     def set_difficulty(self, difficulty: GameDifficulty = GameDifficulty.EASY):
-        del self.game_field
-        # self.removeDockWidget()
-        height, width, mines_count = difficulty.value
-        self.game_field = GameField(height=height, width=width, mines_count=mines_count, parent=self)
-        self.update()
+        self.difficulty = difficulty
+        self.layout().removeWidget(self.mainWidget)
+        self.mainWidget.setParent(None)
+        self.initialize()
 
 
 app = QApplication(sys.argv)
