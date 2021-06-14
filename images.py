@@ -20,6 +20,7 @@ class Images(QObject):
         self.hard = QImage("img//hard.png")
         self.restart = QImage("img//restart.png")
         self.close = QImage("img//close.png")
+        self.dinamite = QImage("img//dinamite.png")
 
         self.numbers = [
             QImage(),

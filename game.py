@@ -425,6 +425,8 @@ class MainWindow(QMainWindow):
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
         self.images = Images()
+        self.setWindowIcon(QIcon(QPixmap.fromImage(self.images.dinamite)))
+        self.setWindowTitle("Mine Reaper")
         self.game_actions = GameActions(self)
         self.menu = GameMenu(self)
         self.difficulty = GameDifficulty.EASY
