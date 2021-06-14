@@ -21,6 +21,10 @@ class Images(QObject):
         self.question = QImage("img//question.png")
         self.smile = QImage("img//smile.png")
         self.win_smile = QImage("img//win_smile.png")
+        self.easy = QImage("img//easy.png")
+        self.medium = QImage("img//medium.png")
+        self.hard = QImage("img//hard.png")
+
         self.numbers = [
             QImage(),
             QImage("img//1.png"),
@@ -70,7 +74,17 @@ class FieldItem(QPushButton):
 
         self.current_image = self.parent().images.empty
 
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # sizePolicy = QSizePolicy.Expanding
+        # GrowFlag | ShrinkFlag | ExpandFlag
+        # sizePolicy.setHeightForWidth(True)
+        #
+        # self.setSizePolicy(sizePolicy, sizePolicy)
+        sizePolicy = QSizePolicy.Expanding
+        policy = QSizePolicy()
+        policy.setHorizontalPolicy(sizePolicy)
+        policy.setVerticalPolicy(sizePolicy)
+        policy.setWidthForHeight(True)
+        self.setSizePolicy(policy)
 
         self.pressed.connect(lambda item=self: item.parent().item_clicked(item))
         self.rightButtonPressed.connect(self.toggle_status)
@@ -87,7 +101,7 @@ class FieldItem(QPushButton):
         painter.end()
 
     def sizeHint(self):
-        return QSize(50, 50)
+        return QSize(45, 45)
 
     def find_neighbours(self):
         if self.neighbours is None:
@@ -200,6 +214,13 @@ class GameField(QWidget):
     game_reset = pyqtSignal()
     items_block_released = pyqtSignal()
 
+    def resizeEvent(self, e: QResizeEvent):
+        w, h = e.size().width(), e.size().height()
+        wh = min(w, h)
+        new_size = QSize(wh, wh)
+        e.accept()
+        self.resize(new_size)
+
     def __init__(self, width=10, height=10, mines_count=10, *args, **kwargs):
         super(GameField, self).__init__(*args, **kwargs)
 
@@ -216,6 +237,8 @@ class GameField(QWidget):
         self.fieldItems2D = []
         layout = QGridLayout(self)
         layout.setSpacing(0)
+        layout.heightForWidth(True)
+
         for y in range(height):
             self.fieldItems2D.append([])
             for x in range(width):
@@ -271,6 +294,8 @@ class GameField(QWidget):
                 item.was_fatal_item = True
                 item.update()
                 self.loose()
+            elif item.visible:
+                pass
             else:
                 item.calculate()
 
@@ -280,9 +305,9 @@ class GameField(QWidget):
             self.first_turn = False
 
         elif self.game_status == GameStatus.RUNNING:
-                self.first_turn = False
-                self.start_game()
-                self.item_clicked(item)
+            self.first_turn = False
+            self.start_game()
+            self.item_clicked(item)
 
     def win(self):
         self.game_status = GameStatus.WON
@@ -321,9 +346,9 @@ class GameField(QWidget):
         self.mines_found = 0
         self.game_run = False
         self.game_status = GameStatus.RUNNING
-        self.game_status_changed.emit(self.game_status)
         list(map(FieldItem.reset, self.fieldItems))
         self.place_mines()
+        self.game_status_changed.emit(self.game_status)
         self.game_reset.emit()
 
 
@@ -363,7 +388,6 @@ class StatusBar(QWidget):
         self.timer = QTimer(self)
 
     def set_smile(self, game_status: GameStatus):
-        # self.img.setPixmap(pixmap)
         if game_status == GameStatus.RUNNING:
             self.img.setPixmap(self.pixmaps["smile"])
         elif game_status == GameStatus.WON:
@@ -401,14 +425,66 @@ class StatusBar(QWidget):
 
 class GameDifficulty(Enum):
     EASY = (10, 10, 10)
-    MEDIUM = (20, 20, 20)
-    HARD = (20, 20, 30)
+    MEDIUM = (12, 12, 20)
+    HARD = (15, 15, 30)
+
+
+class GameActions(QObject):
+    def __init__(self, *args, **kwargs):
+        super(GameActions, self).__init__(*args, **kwargs)
+        parent = self.parent()
+
+        self.exit = QAction(QIcon(QPixmap.fromImage(parent.images.flag_green)), "Exit", self)
+
+        self.reset = QAction(QIcon(QPixmap.fromImage(parent.images.flag_green)), "Restart", self)
+
+        self.easy = QAction(QIcon(QPixmap.fromImage(parent.images.easy)), "Easy", self)
+        self.medium = QAction(QIcon(QPixmap.fromImage(parent.images.medium)), "Medium", self)
+        self.hard = QAction(QIcon(QPixmap.fromImage(parent.images.hard)), "Hard", self)
+
+        self.difficulty = QActionGroup(self)
+        self.difficulty.addAction(self.easy)
+        self.difficulty.addAction(self.medium)
+        self.difficulty.addAction(self.hard)
+
+        [a.setCheckable(True) for a in self.difficulty.actions()]
+
+    def bind(self):
+        parent = self.parent()
+        self.exit.triggered.connect(parent.close)
+        self.reset.triggered.connect(parent.game_field.reset_game)
+        self.easy.triggered.connect(lambda p=parent: parent.set_difficulty(GameDifficulty.EASY))
+        self.medium.triggered.connect(lambda p=parent: parent.set_difficulty(GameDifficulty.MEDIUM))
+        self.hard.triggered.connect(lambda p=parent: parent.set_difficulty(GameDifficulty.HARD))
+
+
+class GameMenu(QObject):
+    def __init__(self, *args, **kwargs):
+        super(GameMenu, self).__init__(*args, **kwargs)
+        parent = self.parent()
+        actions = parent.game_actions
+        parent_menu = self.parent().menuBar().addMenu("&File")
+
+        parent_menu.addAction(actions.reset)
+
+        difficulty_menu = parent_menu.addMenu("&Difficulty")
+        # difficulty_menu.addAction(actions.easy)
+        # difficulty_menu.addAction(actions.medium)
+        # difficulty_menu.addAction(actions.hard)
+        difficulty_menu.addActions(actions.difficulty.actions())
+        # QMenuBar().addActions()
+        # QMenu().add
+
+        parent_menu.addMenu(difficulty_menu)
+        parent_menu.addAction(actions.exit)
 
 
 class MainWindow(QMainWindow):
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
         self.images = Images()
+        self.game_actions = GameActions(self)
+        self.menu = GameMenu(self)
 
         self.mainWidget = QWidget(self)
 
@@ -418,19 +494,32 @@ class MainWindow(QMainWindow):
         self.status_bar = StatusBar(self)
         layout.addWidget(self.status_bar)
 
-        height, width, mines_count = GameDifficulty.EASY.value
-        self.game_field = GameField(height=height, width=width, mines_count=mines_count, parent=self)
+        # height, width, mines_count = GameDifficulty.EASY.value
+        # self.game_field = GameField(height=height, width=width, mines_count=mines_count, parent=self)
+        self.game_field = QWidget()
+        self.set_difficulty()
+
+        self.game_actions.bind()
+
         layout.addWidget(self.game_field)
 
         self.game_field.mines_count_changed.connect(self.status_bar.mines_counter.display)
         self.game_field.game_started.connect(self.status_bar.start_timer)
         self.game_field.game_ended.connect(self.status_bar.end_timer)
-        # self.game_field.game_w.connect(self.status_bar.end_timer)
         self.game_field.game_reset.connect(self.status_bar.reset)
         self.game_field.game_status_changed.connect(self.status_bar.set_smile)
 
         self.setCentralWidget(self.mainWidget)
+        self.mainWidget.resize = self.game_field.resize
+        self.resize = self.game_field.resize
         self.show()
+
+    def set_difficulty(self, difficulty: GameDifficulty = GameDifficulty.EASY):
+        del self.game_field
+        # self.removeDockWidget()
+        height, width, mines_count = difficulty.value
+        self.game_field = GameField(height=height, width=width, mines_count=mines_count, parent=self)
+        self.update()
 
 
 app = QApplication(sys.argv)
