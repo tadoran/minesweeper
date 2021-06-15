@@ -7,7 +7,15 @@ from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 
 from minesweeper.enums import FieldItemState, GameStatus, GameDifficulty
-from minesweeper.images import Images
+from minesweeper.resources import Images
+
+from about import Ui_Dialog
+
+
+class AboutDialog(QDialog, Ui_Dialog):
+    def __init__(self, *args, **kwargs):
+        super(AboutDialog, self).__init__(*args, **kwargs)
+        self.setupUi(self)
 
 
 class FieldItem(QPushButton):
@@ -246,7 +254,7 @@ class GameField(QWidget):
                 while not found_new_mine_spot:
                     current_item = choice(self.fieldItems)
                     if not current_item.has_mine:
-                        print(f"Ha-ha, found mine on first turn! Ok, that mine was moved to {current_item}")
+                        # print(f"Ha-ha, found mine on first turn! Ok, that mine was moved to {current_item}")
                         index = self.items_with_mines.index(item)
                         self.items_with_mines[index] = current_item
                         current_item.has_mine = True
@@ -396,6 +404,8 @@ class GameActions(QObject):
 
         self.exit = QAction(QIcon(QPixmap.fromImage(images.close)), "Exit", self)
 
+        self.aboutDialog = QAction(QIcon(QPixmap.fromImage(images.about)), "About", self)
+
     def bind(self):
         parent = self.parent()
         self.exit.triggered.connect(parent.close)
@@ -403,6 +413,7 @@ class GameActions(QObject):
         self.easy.triggered.connect(lambda p=parent: parent.set_difficulty(GameDifficulty.EASY))
         self.medium.triggered.connect(lambda p=parent: parent.set_difficulty(GameDifficulty.MEDIUM))
         self.hard.triggered.connect(lambda p=parent: parent.set_difficulty(GameDifficulty.HARD))
+        self.aboutDialog.triggered.connect(parent.show_about_dialog)
 
 
 class GameMenu(QObject):
@@ -419,6 +430,10 @@ class GameMenu(QObject):
 
         parent_menu.addMenu(difficulty_menu)
         parent_menu.addAction(actions.exit)
+
+        help_menu = self.parent().menuBar().addMenu("&Help")
+        about = actions.aboutDialog
+        help_menu.addAction(about)
 
 
 class MainWindow(QMainWindow):
@@ -464,6 +479,10 @@ class MainWindow(QMainWindow):
         self.layout().removeWidget(self.mainWidget)
         self.mainWidget.setParent(None)
         self.initialize()
+
+    def show_about_dialog(self):
+        self.about_dialog = AboutDialog(self)
+        self.about_dialog.exec_()
 
 
 app = QApplication(sys.argv)
