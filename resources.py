@@ -22,6 +22,8 @@ class Images(QObject):
         self.close = QImage("img//close.png")
         self.dynamite = QImage("img//dynamite.png")
         self.about = QImage("img//about.png")
+        self.audio_on = QImage("img//audio_on.png")
+        self.audio_off = QImage("img//audio_off.png")
 
         self.numbers = [
             QImage(),
@@ -35,3 +37,30 @@ class Images(QObject):
             QImage("img//8.png"),
             QImage("img//9.png")
         ]
+
+
+class Sounds(QObject):
+    def __init__(self, audio_on=True, *args, **kwargs):
+        super(Sounds, self).__init__(*args, **kwargs)
+        self.audio_on = audio_on
+        self.pop = GameSound("wav//pop.wav", self)
+        self.win = GameSound("wav//win.wav", self)
+        self.blow = GameSound("wav//blow.wav", self)
+        self.swap = GameSound("wav//swap.wav", self)
+
+    def play(self):
+        if self.parent.audio_on:
+            super(Sounds, self).play()
+
+    def toggle_sound(self, toggle: bool):
+        print(toggle)
+        self.audio_on = toggle
+
+class GameSound(QSound):
+    def __init__(self, filename, parent):
+        super(GameSound, self).__init__(filename)
+        self.parent = parent
+
+    def play(self):
+        if self.parent.audio_on:
+            super(GameSound, self).play()

@@ -97,6 +97,8 @@ class FieldItem(QPushButton):
         self.status = list(dropwhile(lambda x, c=self.status: x != c, chain.from_iterable(repeat(FieldItemState, 2))))[
             1]
 
+        self.parent().sounds.swap.play()
+
         if self.status == FieldItemState.MINE:
             self.current_image = self.parent().images.flag_red
             self.parent().mines_found_count(1)
@@ -188,6 +190,7 @@ class GameField(QWidget):
         super(GameField, self).__init__(*args, **kwargs)
 
         self.images = self.parent().images
+        self.sounds = self.parent().sounds
 
         self.width = width
         self.height = height
@@ -249,6 +252,7 @@ class GameField(QWidget):
             if item.status != FieldItemState.EMPTY:
                 return
             if item.has_mine and self.first_turn:
+                self.sounds.pop.play()
                 item.has_mine = False
                 found_new_mine_spot = False
                 while not found_new_mine_spot:
@@ -263,11 +267,13 @@ class GameField(QWidget):
 
             elif item.has_mine:
                 item.was_fatal_item = True
+                self.sounds.blow.play()
                 item.update()
                 self.loose()
             elif item.visible:
                 pass
             else:
+                self.sounds.pop.play()
                 item.calculate()
 
             item.update()
@@ -281,6 +287,7 @@ class GameField(QWidget):
 
     def win(self):
         self.game_status = GameStatus.WON
+        self.sounds.win.play()
         # print("You have won!")
         self.stop_game()
         self.game_ended.emit()
@@ -402,6 +409,11 @@ class GameActions(QObject):
         [a.setCheckable(True) for a in self.difficulty.actions()]
         self.easy.setChecked(True)
 
+        self.toggleSound = QAction("Sounds", self)
+        self.toggleSound.setIcon(QIcon(QPixmap.fromImage(images.audio_on)))
+        self.toggleSound.setCheckable(True)
+        self.toggleSound.setChecked(True)
+
         self.exit = QAction(QIcon(QPixmap.fromImage(images.close)), "Exit", self)
 
         self.aboutDialog = QAction(QIcon(QPixmap.fromImage(images.about)), "About", self)
@@ -410,6 +422,8 @@ class GameActions(QObject):
         parent = self.parent()
         self.exit.triggered.connect(parent.close)
         self.reset.triggered.connect(parent.game_field.reset_game)
+        self.toggleSound.triggered.connect(parent.sounds.toggle_sound)
+        self.toggleSound.triggered.connect(self.change_sound_icon)
         self.easy.triggered.connect(lambda p=parent: parent.set_difficulty(GameDifficulty.EASY))
         self.medium.triggered.connect(lambda p=parent: parent.set_difficulty(GameDifficulty.MEDIUM))
         self.hard.triggered.connect(lambda p=parent: parent.set_difficulty(GameDifficulty.HARD))
@@ -424,6 +438,8 @@ class GameMenu(QObject):
 
         parent_menu = self.parent().menuBar().addMenu("&File")
         parent_menu.addAction(actions.reset)
+
+        parent_menu.addAction(actions.toggleSound)
 
         difficulty_menu = parent_menu.addMenu("&Difficulty")
         difficulty_menu.addActions(actions.difficulty.actions())
@@ -440,7 +456,8 @@ class MainWindow(QMainWindow):
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
         self.images = Images()
-        self.setWindowIcon(QIcon(QPixmap.fromImage(self.images.dinamite)))
+        self.sounds = Sounds()
+        self.setWindowIcon(QIcon(QPixmap.fromImage(self.images.dynamite)))
         self.setWindowTitle("Mine Reaper")
         self.game_actions = GameActions(self)
         self.menu = GameMenu(self)
