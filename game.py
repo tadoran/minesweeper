@@ -6,8 +6,8 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 
-from minesweeper.enums import FieldItemState, GameStatus, GameDifficulty
-from minesweeper.resources import Images
+from enums import FieldItemState, GameStatus, GameDifficulty
+from resources import Images, Sounds
 
 from about import Ui_Dialog
 
@@ -429,6 +429,12 @@ class GameActions(QObject):
         self.hard.triggered.connect(lambda p=parent: parent.set_difficulty(GameDifficulty.HARD))
         self.aboutDialog.triggered.connect(parent.show_about_dialog)
 
+    def change_sound_icon(self, val):
+        if val:
+            self.toggleSound.setIcon(QIcon(QPixmap.fromImage(self.parent().images.audio_on)))
+        else:
+            self.toggleSound.setIcon(QIcon(QPixmap.fromImage(self.parent().images.audio_off)))
+
 
 class GameMenu(QObject):
     def __init__(self, *args, **kwargs):
@@ -471,7 +477,7 @@ class MainWindow(QMainWindow):
         height, width, mines_count = self.difficulty.value
         self.game_field = GameField(height=height, width=width, mines_count=mines_count, parent=self)
 
-        layout = QVBoxLayout(self)
+        layout = QVBoxLayout(self.mainWidget)
         self.mainWidget.setLayout(layout)
         self.status_bar = StatusBar(self)
         layout.addWidget(self.status_bar)

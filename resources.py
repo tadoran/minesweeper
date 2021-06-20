@@ -1,5 +1,6 @@
 from PyQt5.QtCore import QObject
 from PyQt5.QtGui import QImage
+from PyQt5.QtMultimedia import QSound
 
 
 class Images(QObject):
@@ -11,7 +12,7 @@ class Images(QObject):
         self.explosion = QImage("img//explosion.png")
         self.flag_green = QImage("img//flag_green.png")
         self.flag_red = QImage("img//flag_red.png")
-        self.mine = QImage("img//mine.png")
+        self.mine = QImage("./img//mine.png")
         self.question = QImage("img//question.png")
         self.smile = QImage("img//smile.png")
         self.win_smile = QImage("img//win_smile.png")
@@ -53,8 +54,8 @@ class Sounds(QObject):
             super(Sounds, self).play()
 
     def toggle_sound(self, toggle: bool):
-        print(toggle)
         self.audio_on = toggle
+
 
 class GameSound(QSound):
     def __init__(self, filename, parent):
