@@ -50,7 +50,7 @@ class FieldItem(QPushButton):
     def paintEvent(self, e: QPaintEvent):
         super().paintEvent(e)
         painter = QPainter(self)
-
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
         painter.drawImage(
             self.rect().marginsAdded(QMargins() - 5),
             self.current_image
@@ -62,8 +62,6 @@ class FieldItem(QPushButton):
 
     def minimumSizeHint(self):
         return QSize(self.sizeHint().width() // 2, self.sizeHint().height() // 2)
-
-    # TODO: Resize should be aligned with size
 
     def find_neighbours(self):
         if self.neighbours is None:
